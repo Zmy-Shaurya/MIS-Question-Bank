@@ -685,7 +685,11 @@ details.panel>summary{cursor:pointer; font-weight:600}
     var front = t ? esc(x.t) : esc(x.q), tags = '<span class="tag">Week '+x.w+'</span><span class="tag">'+lec2(x.l)+'</span>'+(t&&x.c?'<span class="tag">tested '+x.c+'x</span>':'');
     var back = '';
     if(cs.shown){
-      back = t ? '<div class="back">'+x.defs.map(function(d){ return '<b class="lbl">Definition'+(x.defs.length>1?' ('+lec2(d.l)+')':'')+'</b>'+esc(d.d)+(d.s?'<b class="lbl">Why it matters</b>'+esc(d.s):''); }).join('')+'</div>'
+      back = t ? '<div class="back">'+(function(){
+        function one(d){ return '<b class="lbl">Definition</b>'+esc(d.d)+(d.s?'<b class="lbl">Why it matters</b>'+esc(d.s):''); }
+        var rest = x.defs.slice(1);
+        return one(x.defs[0])+(rest.length?'<details style="margin-top:12px"><summary class="hint">Also defined in '+rest.map(function(d){return lec2(d.l)}).join(', ')+'</summary>'+rest.map(function(d){ return '<p class="hint" style="margin-top:8px"><b>'+lec2(d.l)+':</b> '+esc(d.d)+(d.s?' '+esc(d.s):'')+'</p>'; }).join('')+'</details>':'');
+      })()+'</div>'
                : '<div class="back"><b class="lbl">Answer</b><b>'+esc(x.o[x.a])+'</b>'+(x.e?'<b class="lbl">Explanation</b>'+esc(x.e):'')+'</div>';
     }
     app.innerHTML =
