@@ -825,9 +825,17 @@ input,select{font-size:16px}
         '<li><b>Only 7.5% of questions repeat another one’s fact.</b> They are mostly distinct facts, so drill breadth, not repeats.</li>'+
         '<li><b>Caveat:</b> these are AI-generated from lecture summaries. The real exam is set by NPTEL and may be worded differently.</li></ul></details>'+
       '<details class="panel"><summary>Lecture by lecture</summary><div class="topbar" style="margin-top:12px"><span></span><div class="seg" id="lsort" style="max-width:260px"><button data-s="order" aria-pressed="'+(lecSort==='order')+'">In order</button><button data-s="weak" aria-pressed="'+(lecSort==='weak')+'">Weakest first</button></div></div>'+
-      '<p class="hint" style="margin:6px 0 12px">Weakest first needs 3+ answered quiz questions per lecture.</p><div class="lecs">'+lrows+'</div></details>';
+      '<p class="hint" style="margin:6px 0 12px">Weakest first needs 3+ answered quiz questions per lecture.</p><div class="lecs">'+lrows+'</div></details>'+
+      '<details class="panel"><summary>Backup and restore progress</summary>'+
+        '<p class="hint" style="margin:10px 0">Progress lives only in this browser. Save it to a small file and load it on another device or browser.</p>'+
+        '<div class="actions"><button class="btn sm" id="bkexp">Save progress file</button><label class="btn ghost sm" for="bkimp" style="display:inline-flex;align-items:center;cursor:pointer">Load progress file</label>'+
+        '<input type="file" id="bkimp" accept=".json,application/json" hidden></div>'+
+        '<div class="toggle" style="margin-top:12px"><select id="bkmode" aria-label="Import mode"><option value="merge">Merge with what is here (keeps the best of both)</option><option value="replace">Replace what is here</option></select></div>'+
+        '<p class="hint" id="bkmsg" style="margin-top:10px" role="status"></p></details>';
     bindNav();
     document.getElementById('hrs').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; prepH=+b.dataset.h; lsSet('mis-prep-h-v1',prepH); renderPrep(); };
+    document.getElementById('bkexp').onclick=exportProgress;
+    document.getElementById('bkimp').onchange=function(e){ importProgress(e.target.files[0], document.getElementById('bkmode').value); };
     document.getElementById('lsort').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; lecSort=b.dataset.s; renderPrep(); };
     app.onclick=function(e){
       var b=e.target.closest('button[data-p],button[data-a]'); if(!b) return;
@@ -846,6 +854,49 @@ input,select{font-size:16px}
       }
       window.scrollTo(0,0);
     };
+  }
+
+  /* ---------- backup / restore (same localStorage keys as before, so existing progress is untouched) ---------- */
+  var BK_KEYS = ['mis-quiz-missed-v1','mis-quiz-read-v1','mis-cards-v1','mis-stats-v1','mis-quiz-settings-v1','mis-prep-h-v1','mis-theme-v1'];
+  function bkMsg(m){ var el=document.getElementById('bkmsg'); if(el) el.textContent=m; }
+  function exportProgress(){
+    var out={app:'mis-quiz-bank', version:1, saved:new Date().toISOString(), data:{}};
+    BK_KEYS.forEach(function(k){ try{ var v=localStorage.getItem(k); if(v!==null) out.data[k]=JSON.parse(v); }catch(e){} });
+    var blob=new Blob([JSON.stringify(out)],{type:'application/json'}), a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='mis-progress-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+    bkMsg('Saved. Keep the file; load it on the other device.');
+  }
+  function importProgress(file, mode){
+    if(!file) return;
+    var rd=new FileReader();
+    rd.onerror=function(){ bkMsg('Could not read that file.'); };
+    rd.onload=function(){
+      var inp; try{ inp=JSON.parse(rd.result); }catch(e){ return bkMsg('That is not a valid progress file.'); }
+      if(!inp || inp.app!=='mis-quiz-bank' || !inp.data || typeof inp.data!=='object') return bkMsg('That file is not from this site.');
+      var d=inp.data, isObj=function(x){ return x && typeof x==='object' && !Array.isArray(x); };
+      var cur=function(k,def){ return lsGet(k,def); };
+      try{
+        // validate shapes before touching anything
+        if(d['mis-quiz-missed-v1']!==undefined && !Array.isArray(d['mis-quiz-missed-v1'])) throw 0;
+        if(d['mis-quiz-read-v1']!==undefined && !Array.isArray(d['mis-quiz-read-v1'])) throw 0;
+        if(d['mis-cards-v1']!==undefined && !isObj(d['mis-cards-v1'])) throw 0;
+        if(d['mis-stats-v1']!==undefined && !isObj(d['mis-stats-v1'])) throw 0;
+      }catch(e){ return bkMsg('That file looks damaged. Nothing was changed.'); }
+      var res={};
+      if(mode==='replace'){ BK_KEYS.forEach(function(k){ if(d[k]!==undefined) res[k]=d[k]; }); }
+      else {
+        var union=function(k){ return Array.from(new Set((cur(k,[])).concat(d[k]||[]))); };
+        res['mis-quiz-missed-v1']=union('mis-quiz-missed-v1'); res['mis-quiz-read-v1']=union('mis-quiz-read-v1');
+        var cards=cur('mis-cards-v1',{}), ic=d['mis-cards-v1']||{};
+        Object.keys(ic).forEach(function(k){ cards[k]=Math.max(cards[k]||0, ic[k]||0); }); res['mis-cards-v1']=cards;
+        var st=cur('mis-stats-v1',{}), is=d['mis-stats-v1']||{};
+        Object.keys(is).forEach(function(l){ if(!st[l] || (is[l][1]||0)>st[l][1]) st[l]=is[l]; }); res['mis-stats-v1']=st;
+      }
+      Object.keys(res).forEach(function(k){ try{ localStorage.setItem(k, JSON.stringify(res[k])); }catch(e){} });
+      bkMsg('Loaded. Reloading...'); setTimeout(function(){ location.reload(); }, 400);
+    };
+    rd.readAsText(file);
   }
 
   renderPrep();
